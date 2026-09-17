@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Semakan Pergerakan Fail - PDT Bentong</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col justify-between">
+
+    <!-- Header / Navbar -->
+    <header class="bg-blue-900 text-white p-4 shadow-md">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold">Pejabat Daerah dan Tanah Bentong</h1>
+                <p class="text-xs text-blue-200">Sistem Semakan Pergerakan Fail</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-2xl w-full mx-auto p-4 flex-grow my-8">
+        <div class="bg-white p-6 rounded-lg shadow-md border border-slate-200">
+            <h2 class="text-2xl font-bold text-slate-800 text-center mb-2">Semakan Status Fail</h2>
+            <p class="text-sm text-slate-600 text-center mb-6">Sila masukkan No. Fail atau No. MyKad untuk membuat semakan.</p>
+
+            <!-- Search Form -->
+            <form id="searchForm" class="space-y-4">
+                <div>
+                    <label for="searchQuery" class="block text-sm font-medium text-slate-700 mb-1">No. Fail / No. MyKad</label>
+                    <input 
+                        type="text" 
+                        id="searchQuery" 
+                        placeholder="Cth: FAIL/2026/001 atau 900101105555" 
+                        class="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        required
+                    >
+                </div>
+                <button 
+                    type="submit" 
+                    class="w-full bg-blue-800 hover:bg-blue-900 text-white font-semibold py-2 px-4 rounded-md transition duration-200"
+                >
+                    Cari Fail
+                </button>
+            </form>
+
+            <!-- Loading Spinner -->
+            <div id="loading" class="hidden text-center py-6">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-800 border-t-transparent"></div>
+                <p class="text-sm text-slate-600 mt-2">Mencari rekod fail...</p>
+            </div>
+
+            <!-- Error / Alert Message -->
+            <div id="alertMessage" class="hidden mt-6 p-4 rounded-md text-sm"></div>
+
+            <!-- Result Display Card -->
+            <div id="resultCard" class="hidden mt-6 border border-slate-200 rounded-md overflow-hidden">
+                <div class="bg-blue-50 p-4 border-b border-slate-200">
+                    <h3 class="font-bold text-slate-800 text-lg" id="resFileName">-</h3>
+                    <p class="text-xs text-slate-500">No. Fail: <span id="resFileNumber" class="font-mono font-semibold text-slate-700">-</span></p>
+                </div>
+                <div class="p-4 space-y-3 text-sm">
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-500">Pemohon:</span>
+                        <span class="font-medium text-slate-800" id="resOwnerName">-</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-500">Lokasi Semasa:</span>
+                        <span class="font-semibold text-blue-900" id="resLocation">-</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-500">Status Fail:</span>
+                        <span class="px-2 py-1 text-xs font-semibold rounded-full" id="resStatus">-</span>
+                    </div>
+                    <div class="flex justify-between pb-1">
+                        <span class="text-slate-500">Kemaskini Terakhir:</span>
+                        <span class="text-slate-700" id="resActionDate">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-800 text-white text-center py-4 text-xs">
+        &copy; 2026 Pejabat Daerah dan Tanah Bentong. Hak Cipta Terpelihara.
+    </footer>
+
+    <!-- Supabase Integration Script -->
+    <script>
+        // -------------------------------------------------------------
+        // TODO: REPLACE THESE TWO VARIABLES WITH YOUR SUPABASE DETAILS
+        // -------------------------------------------------------------
+        const SUPABASE_URL = "https://lzlovpptvpcpktsmaruu.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6bG92cHB0dnBjcGt0c21hcnV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2MjAyMDksImV4cCI6MjEwNTE5NjIwOX0.AjJQYr7LG9piJ4KSWn1LghFA6-8-HDt3k-3swLl31jA";
+
+        // Initialize Supabase client
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // DOM Elements
+        const searchForm = document.getElementById('searchForm');
+        const searchQuery = document.getElementById('searchQuery');
+        const loading = document.getElementById('loading');
+        const alertMessage = document.getElementById('alertMessage');
+        const resultCard = document.getElementById('resultCard');
+
+        // Form Submit Event
+        searchForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = searchQuery.value.trim();
+
+            // Reset view state
+            alertMessage.classList.add('hidden');
+            resultCard.classList.add('hidden');
+            loading.classList.remove('hidden');
+
+            try {
+                // Query database for matching file_number OR mykad_number
+                const { data, error } = await supabase
+                    .from('file_records')
+                    .select('file_number, owner_name, file_name, current_location, status, action_date')
+                    .or(`file_number.eq.${query},mykad_number.eq.${query}`)
+                    .maybeSingle();
+
+                loading.classList.add('hidden');
+
+                if (error) {
+                    showAlert('Ralat teknikal semasa carian. Sila cuba lagi.', 'bg-red-100 text-red-700');
+                    return;
+                }
+
+                if (!data) {
+                    showAlert('Tiada rekod ditemui bagi No. Fail / No. MyKad tersebut.', 'bg-yellow-100 text-yellow-800');
+                    return;
+                }
+
+                // Render matching record
+                document.getElementById('resFileName').textContent = data.file_name;
+                document.getElementById('resFileNumber').textContent = data.file_number;
+                document.getElementById('resOwnerName').textContent = data.owner_name;
+                document.getElementById('resLocation').textContent = data.current_location;
+                document.getElementById('resActionDate').textContent = data.action_date || '-';
+
+                // Status styling
+                const statusBadge = document.getElementById('resStatus');
+                statusBadge.textContent = data.status;
+                if (data.status.toLowerCase().includes('selesai')) {
+                    statusBadge.className = 'px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800';
+                } else {
+                    statusBadge.className = 'px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800';
+                }
+
+                resultCard.classList.remove('hidden');
+
+            } catch (err) {
+                loading.classList.add('hidden');
+                showAlert('Berlaku masalah sambungan.', 'bg-red-100 text-red-700');
+            }
+        });
+
+        function showAlert(msg, colorClass) {
+            alertMessage.className = `mt-6 p-4 rounded-md text-sm ${colorClass}`;
+            alertMessage.textContent = msg;
+            alertMessage.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
